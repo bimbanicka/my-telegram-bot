@@ -105,7 +105,7 @@ async def process_date(message: Message) -> None:
         f"📅 Дата: <b>{date_text}</b>\n\n"
         f"🗓 Минуло днів: <b>{passed_days}</b>\n"
         f"⏱ Минуло секунд: <b>{passed_seconds:,}</b>\n"
-        f"🎯 До найближчого ювілею ({INTERVAL_DAYS} днів): <b>{days_to_anniversary}</b> днів",
+        f"🎯 До найближчого ювілею ({INTERVAL_DAYS} днів): <b>{days_to_anniversary}</b> дн",
         reply_markup=keyboard,
     )
 
