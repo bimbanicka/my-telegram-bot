@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # ====== Настройки ======
-BOT_TOKEN = "8996114840:AAE-e6c1sXFPnIGUxK1WHxyDvkkzkotAfYU"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8996114840:AAHU2Q7jhz2K4LnhU8UzK6knD1TFS9GB7D8")
 INTERVAL_DAYS = 500
 DATA_FILE = Path("user_data.json")
 
