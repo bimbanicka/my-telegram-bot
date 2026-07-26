@@ -71,11 +71,11 @@ def calculate_statistics(selected_date: date) -> tuple[int, int, int]:
 @router.message(CommandStart())
 async def start_command(message: Message) -> None:
     await message.answer(
-        "Привет! 👋\n\n"
-        "Я считаю, сколько дней и секунд прошло с указанной даты, "
-        "а также напоминаю о юбилеях каждые 500 дней.\n\n"
-        "Отправьте дату в формате: <b>ДД.ММ.ГГГГ</b>\n"
-        "Например: <code>05.07.2013</code>"
+        "Вітаю! 👋\n\n"
+        "Я рахую, скільки днів і секунд минуло від вказаної дати, "
+        "а також нагадую про ювілеї кожні 500 днів.\n\n"
+        "Надішліть дату у форматі: <b>ДД.ММ.РРРР</b>\n"
+        "Наприклад: <code>05.07.2013</code>"
     )
 
 
@@ -85,27 +85,27 @@ async def process_date(message: Message) -> None:
     selected_date = parse_date(date_text)
     if selected_date is None:
         await message.answer(
-            "❌ Не удалось распознать дату.\n\n"
-            "Введите её строго в формате <b>ДД.ММ.ГГГГ</b>.\n"
-            "Например: <code>05.07.2013</code>"
+            "❌ Не вдалося розпізнати дату.\n\n"
+            "Введіть її суворо у форматі <b>ДД.ММ.РРРР</b>.\n"
+            "Наприклад: <code>05.07.2013</code>"
         )
         return
     if selected_date > date.today():
-        await message.answer("❌ Эта дата находится в будущем. Введите дату из прошлого.")
+        await message.answer("❌ Ця дата в майбутньому. Введіть дату з минулого.")
         return
 
     passed_days, passed_seconds, days_to_anniversary = calculate_statistics(selected_date)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
-            text="📌 Сделать этой датой главный отсчёт",
+            text="📌 Зробити цю дату головним відліком",
             callback_data=f"set_main_date:{date_text}",
         )
     ]])
     await message.answer(
         f"📅 Дата: <b>{date_text}</b>\n\n"
-        f"🗓 Прошло дней: <b>{passed_days}</b>\n"
-        f"⏱ Прошло секунд: <b>{passed_seconds:,}</b>\n"
-        f"🎯 До ближайшего юбилея ({INTERVAL_DAYS} дней): <b>{days_to_anniversary}</b> дней",
+        f"🗓 Минуло днів: <b>{passed_days}</b>\n"
+        f"⏱ Минуло секунд: <b>{passed_seconds:,}</b>\n"
+        f"🎯 До найближчого ювілею ({INTERVAL_DAYS} днів): <b>{days_to_anniversary}</b> днів",
         reply_markup=keyboard,
     )
 
@@ -119,14 +119,14 @@ async def set_main_date(callback: CallbackQuery) -> None:
     user_data = load_user_data()
     user_data[str(callback.from_user.id)] = date_text
     if save_user_data(user_data):
-        await callback.answer("Главная дата сохранена!")
+        await callback.answer("Головну дату збережено!")
         if callback.message:
             await callback.message.answer(
-                f"✅ Дата <b>{date_text}</b> сохранена как ваш главный отсчёт.\n"
-                f"Я поздравлю вас в каждый юбилей, кратный {INTERVAL_DAYS} дням."
+                f"✅ Дату <b>{date_text}</b> збережено як ваш головний відлік.\n"
+                f"Я привітаю вас із кожним ювілеєм, кратним {INTERVAL_DAYS} дням."
             )
     else:
-        await callback.answer("Не удалось сохранить дату.", show_alert=True)
+        await callback.answer("Не вдалося зберегти дату.", show_alert=True)
 
 
 async def check_anniversaries(bot: Bot) -> None:
@@ -143,8 +143,8 @@ async def check_anniversaries(bot: Bot) -> None:
                 await bot.send_message(
                     chat_id=int(user_id),
                     text=(
-                        "🎉 <b>ЮБИЛЕЙ!</b>\n\n"
-                        f"С вашей главной даты прошло ровно <b>{passed_days}</b> дней "
+                        "🎉 <b>ЮВІЛЕЙ!</b>\n\n"
+                        f"Від вашої головної дати минуло рівно <b>{passed_days}</b> днів "
                         f"(<b>{passed_seconds:,}</b> секунд)!"
                     ),
                 )
