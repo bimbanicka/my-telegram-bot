@@ -1,7 +1,7 @@
-import os
 import asyncio
 import json
 import logging
+import os
 import uuid
 from calendar import monthrange
 from datetime import date, datetime
@@ -18,7 +18,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E")
+# У Render токен потрібно додати в Environment як BOT_TOKEN.
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 INTERVAL_DAYS = 500
 DATA_FILE = Path("user_data.json")
 
@@ -33,52 +34,61 @@ class Form(StatesGroup):
 
 
 def load_data() -> dict:
+    """Завантажує дані користувачів із JSON-файлу."""
     if not DATA_FILE.exists():
         DATA_FILE.write_text("{}", encoding="utf-8")
         return {}
 
     try:
-        raw = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
 
-        if not isinstance(raw, dict):
+        if not isinstance(data, dict):
             return {}
 
         # Підтримка старого формату:
-        # {"123456": "05.07.2013"}
-        for user_id, value in list(raw.items()):
+        # {"123456789": "05.07.2013"}
+        for user_id, value in list(data.items()):
             if isinstance(value, str):
-                raw[user_id] = {"main_date": value}
+                data[user_id] = {"main_date": value}
 
-        return raw
-    except (OSError, json.JSONDecodeError):
+        return data
+    except (OSError, json.JSONDecodeError) as error:
+        logging.error("Помилка читання user_data.json: %s", error)
         return {}
 
 
 def save_data(data: dict) -> bool:
+    """Зберігає дані користувачів у JSON-файл."""
     try:
         DATA_FILE.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         return True
-    except OSError:
+    except OSError as error:
+        logging.error("Помилка запису user_data.json: %s", error)
         return False
 
 
 def get_profile(data: dict, user_id: int) -> dict:
+    """Створює або повертає профіль користувача."""
     profile = data.setdefault(str(user_id), {})
 
     if not isinstance(profile, dict):
         profile = {}
         data[str(user_id)] = profile
 
-    profile.setdefault("important_dates", [])
-    profile.setdefault("notification_hour", 9)
+    if not isinstance(profile.get("important_dates"), list):
+        profile["important_dates"] = []
+
+    if profile.get("notification_hour") not in (9, 18):
+        profile["notification_hour"] = 9
 
     return profile
 
 
 def parse_date(text: str) -> date | None:
+    """Перевіряє строгий формат ДД.ММ.РРРР."""
     try:
         parsed = datetime.strptime(text, "%d.%m.%Y").date()
 
@@ -91,21 +101,26 @@ def parse_date(text: str) -> date | None:
 
 
 def safe_date(year: int, month: int, day: int) -> date:
-    """29 лютого в невисокосний рік вважаємо 28 лютого."""
-    return date(year, month, min(day, monthrange(year, month)[1]))
+    """29 лютого у невисокосний рік вважаємо 28 лютого."""
+    max_day = monthrange(year, month)[1]
+    return date(year, month, min(day, max_day))
 
 
 def days_to_next_birthday(birthday: date, today: date) -> int:
     next_birthday = safe_date(today.year, birthday.month, birthday.day)
 
     if next_birthday < today:
-        next_birthday = safe_date(today.year + 1, birthday.month, birthday.day)
+        next_birthday = safe_date(
+            today.year + 1,
+            birthday.month,
+            birthday.day,
+        )
 
     return (next_birthday - today).days
 
 
 def age_statistics(birthday: date, today: date) -> tuple[int, int, int, int]:
-    """Роки, місяці, дні та секунди від дня народження."""
+    """Повертає: роки, місяці, дні та секунди від дня народження."""
     years = today.year - birthday.year
 
     if today < safe_date(today.year, birthday.month, birthday.day):
@@ -203,7 +218,7 @@ async def start(message: Message) -> None:
         "/delete_birthday — видалити день народження\n"
         "/delete_main_date — видалити головну дату\n"
         "/delete_date — видалити важливу дату\n"
-        "/settings — час сповіщень\n"
+        "/settings — вибрати час сповіщень\n"
         "/cancel — скасувати введення",
         reply_markup=main_keyboard(),
     )
@@ -215,7 +230,7 @@ async def cancel(message: Message, state: FSMContext) -> None:
     await message.answer("Скасовано.")
 
 
-# ====== День народження ======
+# ==================== День народження ====================
 
 @router.message(Command("birthday"))
 async def birthday_command(message: Message, state: FSMContext) -> None:
@@ -253,13 +268,14 @@ async def save_birthday(message: Message, state: FSMContext) -> None:
     profile = get_profile(data, message.from_user.id)
     profile["birthday"] = birthday_text
 
-    save_data(data)
-    await state.clear()
-
-    await message.answer(
-        f"✅ День народження <b>{birthday_text}</b> збережено!\n"
-        "Я привітаю вас саме у цей день."
-    )
+    if save_data(data):
+        await state.clear()
+        await message.answer(
+            f"✅ День народження <b>{birthday_text}</b> збережено!\n"
+            "Я привітаю вас саме у цей день."
+        )
+    else:
+        await message.answer("❌ Не вдалося зберегти дату.")
 
 
 @router.callback_query(F.data == "birthday_countdown")
@@ -273,7 +289,7 @@ async def birthday_countdown(callback: CallbackQuery) -> None:
     if not birthday_text:
         if callback.message:
             await callback.message.answer(
-                "Спочатку вкажіть день народження кнопкою «🎂 Вказати день народження»."
+                "Спочатку вкажіть день народження."
             )
         return
 
@@ -282,8 +298,9 @@ async def birthday_countdown(callback: CallbackQuery) -> None:
     if birthday is None:
         return
 
-    days_left = days_to_next_birthday(birthday, date.today())
-    years, months, days, seconds = age_statistics(birthday, date.today())
+    today = date.today()
+    days_left = days_to_next_birthday(birthday, today)
+    years, months, days, seconds = age_statistics(birthday, today)
 
     if callback.message:
         await callback.message.answer(
@@ -306,7 +323,7 @@ async def delete_birthday(message: Message) -> None:
         await message.answer("День народження ще не збережений.")
 
 
-# ====== Головна дата ======
+# ==================== Головна дата ====================
 
 @router.message(Command("delete_main_date"))
 async def delete_main_date(message: Message) -> None:
@@ -340,16 +357,18 @@ async def set_main_date(callback: CallbackQuery) -> None:
         )
 
 
-# ====== Важливі дати ======
+# ==================== Важливі дати ====================
 
 @router.message(Command("add_date"))
 async def add_date(message: Message, state: FSMContext) -> None:
     await state.set_state(Form.waiting_date_name)
 
     await message.answer(
-        "➕ Напишіть назву дати.\n"
-        "Наприклад: <i>Наша річниця</i>, <i>Мій проєкт</i> або "
-        "<i>День без куріння</i>."
+        "➕ Напишіть назву дати.\n\n"
+        "Наприклад:\n"
+        "• Наша річниця\n"
+        "• Мій проєкт\n"
+        "• День без куріння"
     )
 
 
@@ -360,8 +379,7 @@ async def important_add(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.message:
         await callback.message.answer(
-            "➕ Напишіть назву дати.\n"
-            "Наприклад: <i>Наша річниця</i>."
+            "➕ Напишіть назву важливої дати."
         )
 
 
@@ -392,7 +410,7 @@ async def save_important_date(message: Message, state: FSMContext) -> None:
         )
         return
 
-    form_data = await state.get_data()
+    state_data = await state.get_data()
 
     data = load_data()
     profile = get_profile(data, message.from_user.id)
@@ -400,17 +418,19 @@ async def save_important_date(message: Message, state: FSMContext) -> None:
     profile["important_dates"].append(
         {
             "id": uuid.uuid4().hex[:8],
-            "name": form_data["date_name"],
+            "name": state_data["date_name"],
             "date": date_text,
         }
     )
 
-    save_data(data)
-    await state.clear()
-
-    await message.answer(
-        f"✅ Дату «<b>{form_data['date_name']}</b>» збережено: {date_text}."
-    )
+    if save_data(data):
+        await state.clear()
+        await message.answer(
+            f"✅ Дату «<b>{state_data['date_name']}</b>» збережено: "
+            f"<b>{date_text}</b>."
+        )
+    else:
+        await message.answer("❌ Не вдалося зберегти дату.")
 
 
 @router.message(Command("delete_date"))
@@ -451,7 +471,7 @@ async def delete_important_date(callback: CallbackQuery) -> None:
     data = load_data()
     profile = get_profile(data, callback.from_user.id)
 
-    before = len(profile["important_dates"])
+    old_count = len(profile["important_dates"])
 
     profile["important_dates"] = [
         item
@@ -461,7 +481,7 @@ async def delete_important_date(callback: CallbackQuery) -> None:
 
     save_data(data)
 
-    if len(profile["important_dates"]) < before:
+    if len(profile["important_dates"]) < old_count:
         await callback.answer("Дату видалено!")
     else:
         await callback.answer("Дату не знайдено.")
@@ -472,7 +492,7 @@ async def delete_important_date(callback: CallbackQuery) -> None:
         )
 
 
-# ====== Перегляд даних ======
+# ==================== Перегляд дат ====================
 
 @router.message(Command("my_dates"))
 async def my_dates(message: Message) -> None:
@@ -493,15 +513,19 @@ async def my_dates(message: Message) -> None:
 
         for item in important_dates:
             lines.append(
-                f"• {item.get('name', 'Без назви')} — {item.get('date', '')}"
+                f"• {item.get('name', 'Без назви')} — "
+                f"{item.get('date', '')}"
             )
     else:
         lines.append("\nВажливих дат ще немає.")
 
-    await message.answer("\n".join(lines), reply_markup=main_keyboard())
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=main_keyboard(),
+    )
 
 
-# ====== Час сповіщень ======
+# ==================== Час сповіщень ====================
 
 @router.message(Command("settings"))
 async def settings(message: Message) -> None:
@@ -529,6 +553,10 @@ async def set_notification_hour(callback: CallbackQuery) -> None:
 
     hour = int(callback.data.split(":", maxsplit=1)[1])
 
+    if hour not in (9, 18):
+        await callback.answer("Некоректний час.", show_alert=True)
+        return
+
     data = load_data()
     profile = get_profile(data, callback.from_user.id)
     profile["notification_hour"] = hour
@@ -542,7 +570,7 @@ async def set_notification_hour(callback: CallbackQuery) -> None:
         )
 
 
-# ====== Звичайна дата для підрахунку ======
+# ==================== Підрахунок звичайної дати ====================
 
 @router.message(F.text)
 async def process_main_date(message: Message) -> None:
@@ -589,18 +617,21 @@ async def process_main_date(message: Message) -> None:
     )
 
 
-# ====== Щоденні сповіщення ======
+# ==================== Щоденні сповіщення ====================
 
 async def send_daily_notifications(bot: Bot) -> None:
     """
-    Запускається о 09:00 та 18:00.
-    Користувач отримує повідомлення лише в обраний ним час.
+    Перевірка запускається о 09:00 та 18:00.
+    Людина отримує повідомлення тільки у вибраний нею час.
     """
     today = date.today()
     current_hour = datetime.now().hour
     data = load_data()
 
     for user_id, profile in data.items():
+        if not isinstance(profile, dict):
+            continue
+
         if profile.get("notification_hour", 9) != current_hour:
             continue
 
@@ -635,7 +666,7 @@ async def send_daily_notifications(bot: Bot) -> None:
                             ),
                         )
 
-            # Головна дата та важливі дати.
+            # Перевіряємо головну та всі важливі дати.
             all_dates = []
 
             if profile.get("main_date"):
@@ -644,12 +675,13 @@ async def send_daily_notifications(bot: Bot) -> None:
                 )
 
             for item in profile.get("important_dates", []):
-                all_dates.append(
-                    (
-                        item.get("name", "Важлива дата"),
-                        item.get("date", ""),
+                if isinstance(item, dict):
+                    all_dates.append(
+                        (
+                            item.get("name", "Важлива дата"),
+                            item.get("date", ""),
+                        )
                     )
-                )
 
             for name, date_text in all_dates:
                 event_date = parse_date(date_text)
@@ -659,8 +691,14 @@ async def send_daily_notifications(bot: Bot) -> None:
 
                 passed_days = (today - event_date).days
 
-                # Нагадування про 100, 365 і 1000 днів.
-                if passed_days in (100, 365, 1000):
+                # 100 днів, рівно 1 рік і 1000 днів.
+                one_year_date = safe_date(
+                    event_date.year + 1,
+                    event_date.month,
+                    event_date.day,
+                )
+
+                if passed_days in (100, 1000) or today == one_year_date:
                     await bot.send_message(
                         chat_id=int(user_id),
                         text=(
@@ -671,7 +709,10 @@ async def send_daily_notifications(bot: Bot) -> None:
                     )
 
                 # Ювілеї кожні 500 днів.
-                elif passed_days > 0 and passed_days % INTERVAL_DAYS == 0:
+                elif (
+                    passed_days > 0
+                    and passed_days % INTERVAL_DAYS == 0
+                ):
                     await bot.send_message(
                         chat_id=int(user_id),
                         text=(
@@ -692,9 +733,9 @@ async def send_daily_notifications(bot: Bot) -> None:
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    if BOT_TOKEN == "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E":
+    if not BOT_TOKEN:
         raise ValueError(
-            "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E"
+            "Додайте BOT_TOKEN у Environment Variables на Render."
         )
 
     bot = Bot(
@@ -705,16 +746,25 @@ async def main() -> None:
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
 
+    # Запуск перевірки щодня о 09:00 та 18:00.
     scheduler.add_job(
         send_daily_notifications,
         trigger="cron",
         hour="9,18",
         minute=0,
         args=[bot],
+        id="daily_notifications",
+        replace_existing=True,
     )
 
     scheduler.start()
 
-    await dispatcher.start_polling(bot)
+    try:
+        await dispatcher.start_polling(bot)
+    finally:
+        scheduler.shutdown()
+        await bot.session.close()
+
+
 if __name__ == "__main__":
     asyncio.run(main())
