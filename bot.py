@@ -18,7 +18,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8996114840:AAHU2Q7jhz2K4LnhU8UzK6knD1TFS9GB7D8")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E")
 INTERVAL_DAYS = 500
 DATA_FILE = Path("user_data.json")
 
@@ -692,9 +692,9 @@ async def send_daily_notifications(bot: Bot) -> None:
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    if BOT_TOKEN == "ВСТАВТЕ_СЮДИ_НОВИЙ_ТОКЕН_ВІД_BOTFATHER":
+    if BOT_TOKEN == "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E":
         raise ValueError(
-            "Вставте справжній токен від BotFather у змінну BOT_TOKEN."
+            "8996114840:AAFR1h5ySkTRtVTR27mJ-CfNo4Be7p-BC-E"
         )
 
     bot = Bot(
